@@ -28,7 +28,6 @@ pub fn run_dll_main(base_addr: usize, entry_point: usize) -> i32 {
 }
 
 pub fn tls_callbacks(base_addr: usize, tls_directory_info: &DataDirectory, image_base: usize) {
-    let delta = base_addr.wrapping_sub(image_base);
     let tls_directory = unsafe {
         let dir_ptr =
             (base_addr + tls_directory_info.virtual_address as usize) as *const ImageTlsDirectory;
@@ -42,12 +41,11 @@ pub fn tls_callbacks(base_addr: usize, tls_directory_info: &DataDirectory, image
         return;
     }
 
-    let mut callback_ptr =
-        (tls_directory.address_of_call_backs as usize).wrapping_add(delta) as *const usize;
+    let mut callback_ptr = (tls_directory.address_of_call_backs as usize) as *const usize;
 
     unsafe {
         while *callback_ptr != 0 {
-            let callback: TlsCallback = std::mem::transmute((*callback_ptr).wrapping_add(delta));
+            let callback: TlsCallback = std::mem::transmute(*callback_ptr);
             callback(base_addr as *mut c_void, 1, std::ptr::null_mut());
             callback_ptr = callback_ptr.add(1);
         }
