@@ -46,8 +46,14 @@ pub fn resolve_iat(base_addr: usize, import_dir: &DataDirectory) {
             debug!("Importing dependency library {}", &_dll_name);
 
             // Using loadlibraryA here because of redirected imports (type beat)
-            let l_handle = LoadLibraryA(dll_name_ptr.as_ptr());
+            let mut l_handle = GetModuleHandleA(dll_name_ptr.as_ptr());
             if l_handle.is_null() {
+                l_handle = LoadLibraryA(dll_name_ptr.as_ptr());
+                if l_handle.is_null() {
+                    #[cfg(feature = "log")]
+                    error!("Failed to load library: {:?}", _dll_name);
+                    panic!();
+                }
             }
 
             let mut thunk_rva = descriptor.original_first_thunk;
