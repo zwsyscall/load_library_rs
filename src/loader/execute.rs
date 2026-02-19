@@ -27,7 +27,7 @@ pub fn run_dll_main(base_addr: usize, entry_point: usize) -> i32 {
     }
 }
 
-pub fn tls_callbacks(base_addr: usize, tls_directory_info: &DataDirectory, image_base: usize) {
+pub fn tls_callbacks(base_addr: usize, tls_directory_info: &DataDirectory) {
     let tls_directory = unsafe {
         let dir_ptr =
             (base_addr + tls_directory_info.virtual_address as usize) as *const ImageTlsDirectory;

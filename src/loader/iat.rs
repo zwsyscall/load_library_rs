@@ -1,8 +1,12 @@
+#[cfg(feature = "log")]
+use log::{debug, error, trace};
+
 use crate::loader::DataDirectory;
 use std::ffi::{CStr, c_void};
 
 unsafe extern "system" {
     fn LoadLibraryA(name: *const i8) -> *const c_void;
+    fn GetModuleHandleA(name: *const i8) -> *const c_void;
     fn GetProcAddress(module: *const c_void, name: *const i8) -> *const c_void;
 }
 
@@ -37,12 +41,13 @@ pub fn resolve_iat(base_addr: usize, import_dir: &DataDirectory) {
             }
 
             let dll_name_ptr = CStr::from_ptr((base_addr + descriptor.name as usize) as _);
-            println!("Importing {:#?}", &dll_name_ptr);
+            let _dll_name = dll_name_ptr.to_string_lossy();
+            #[cfg(feature = "log")]
+            debug!("Importing dependency library {}", &_dll_name);
 
             // Using loadlibraryA here because of redirected imports (type beat)
             let l_handle = LoadLibraryA(dll_name_ptr.as_ptr());
             if l_handle.is_null() {
-                panic!("Failed to load dependency library");
             }
 
             let mut thunk_rva = descriptor.original_first_thunk;
@@ -54,16 +59,23 @@ pub fn resolve_iat(base_addr: usize, import_dir: &DataDirectory) {
             let mut ilt_ptr = (base_addr + thunk_rva as usize) as *const u64; // src
             let mut iat_ptr = (base_addr + descriptor.first_thunk as usize) as *mut u64; // dst
 
+            #[cfg(feature = "log")]
+            debug!(
+                "Beginning to iterate ILT at {:#X} and IAT at {:#X}",
+                ilt_ptr as u64, iat_ptr as u64
+            );
             loop {
                 let thunk_val = *ilt_ptr;
 
                 // EOL
                 if thunk_val == 0 {
+                    #[cfg(feature = "log")]
+                    debug!("All functions imported");
                     break;
                 }
 
                 let import_address: u64;
-                let name: String;
+                let _name: String;
 
                 // Ordinal import
                 match (thunk_val >> 63) & 0x1 {
@@ -74,21 +86,22 @@ pub fn resolve_iat(base_addr: usize, import_dir: &DataDirectory) {
                         import_address =
                             GetProcAddress(l_handle, &((*name_struct_ptr).name) as _) as u64;
                         let name_data = CStr::from_ptr(&((*name_struct_ptr).name) as _);
-                        name = name_data.to_str().unwrap().to_string();
+
+                        _name = format!("{}", name_data.to_string_lossy());
+                        #[cfg(feature = "log")]
+                        trace!("Resolved {}->{}", _dll_name, name)
                     }
                     _ => {
                         let ordinal = thunk_val & 0xFFFF;
                         import_address = GetProcAddress(l_handle, ordinal as *const i8) as u64;
-                        name = format!("ordinal {}", ordinal);
+                        _name = format!("ordinal {}", ordinal);
                     }
                 }
 
                 if import_address == 0 {
-                    panic!(
-                        "Failed to resolve import: {}->{}",
-                        dll_name_ptr.to_str().unwrap(),
-                        name
-                    );
+                    #[cfg(feature = "log")]
+                    error!("Failed to resolve import: {}->{}", _dll_name, _name);
+                    panic!();
                 }
 
                 // Finally write the function address to the IAT

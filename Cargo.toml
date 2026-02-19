@@ -6,3 +6,9 @@ edition = "2024"
 
 [dependencies]
 goblin = "0.10.4"
+log = { version = "0.4.29", optional = true }
+
+
+[features]
+default = []
+log = ["dep:log"]

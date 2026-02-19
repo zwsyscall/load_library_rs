@@ -1,6 +1,9 @@
 #![allow(unused_unsafe)]
 use std::ffi::CStr;
 
+#[cfg(feature = "log")]
+use log::debug;
+
 macro_rules! ptr_at {
     ($base:expr, $rva:expr) => {
         unsafe { ($base as *const u8).add($rva as usize).cast() }
@@ -132,6 +135,8 @@ fn fetch_module_functions(
         };
 
         if name == target {
+            #[cfg(feature = "log")]
+            debug!("Found function at {:#X}", function_address as usize);
             return Some(function_address);
         }
     }
