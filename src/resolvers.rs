@@ -1,6 +1,17 @@
 #![allow(unused_unsafe)]
 use std::ffi::CStr;
 
+pub trait Resolver {
+    fn resolve(&self, base_addr: usize, name: &str) -> Option<*const u8>;
+}
+
+pub struct DefaultResolver {}
+impl Resolver for DefaultResolver {
+    fn resolve(&self, base_addr: usize, name: &str) -> Option<*const u8> {
+        find_function(base_addr, name)
+    }
+}
+
 #[cfg(feature = "log")]
 use log::debug;
 
@@ -143,7 +154,7 @@ fn fetch_module_functions(
     None
 }
 
-pub(crate) fn find_function(module_base_address: usize, name: &str) -> Option<*const u8> {
+fn find_function(module_base_address: usize, name: &str) -> Option<*const u8> {
     let dos_header = module_base_address as *const ImageDosHeader;
     let e_lfanew = deref!(dos_header).e_lfanew;
 

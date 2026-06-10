@@ -1,32 +1,26 @@
 #[cfg(feature = "log")]
 use log::{debug, info};
-use std::{ffi::c_void, ptr::null_mut};
 
 use crate::{
+    allocators::{self, Allocator},
     error::MappingError,
     loader::{self, DllInformation},
-    options::{Allocator, Resolver},
     parser,
+    resolvers::{self, Resolver},
 };
 
-unsafe extern "system" {
-    fn VirtualAlloc(
-        address: *mut std::ffi::c_void,
-        size: usize,
-        alloc_type: u32,
-        protect_flags: u32,
-    ) -> *const c_void;
-}
-
-pub struct Library {
+pub struct Library<
+    A: Allocator = allocators::DefaultAllocator,
+    R: Resolver = resolvers::DefaultResolver,
+> {
     pub(crate) base_address: Option<usize>,
-    allocator: Allocator,
-    resolver: Resolver,
+    allocator: A,
+    resolver: R,
     data: Option<Vec<u8>>,
 }
 
 // Construction
-impl Library {
+impl<A: Allocator, R: Resolver> Library<A, R> {
     fn internal_map(
         base_addr: usize,
         allocated_region_size: usize,
@@ -88,32 +82,10 @@ impl Library {
         let data = &self.data.take().ok_or(MappingError::MissingData)?;
         let dll = parser::parse_header(&data)?;
 
-        let (base_address, allocation_size) = match self.allocator {
-            Allocator::Native => unsafe {
-                #[cfg(feature = "log")]
-                debug!(
-                    "Calling VirtualAlloc(0x0, {:#X}, {:#X}, {:#X});",
-                    dll.size_of_image,
-                    0x1000 | 0x2000,
-                    0x04
-                );
-
-                let addr = VirtualAlloc(null_mut(), dll.size_of_image, 0x1000 | 0x2000, 0x04);
-                if addr.is_null() {
-                    return Err(MappingError::AllocatorFailure);
-                }
-                (addr as usize, dll.size_of_image)
-            },
-            Allocator::PreAllocated(address, size) => (address, size),
-            Allocator::Custom(alloc) => {
-                #[cfg(feature = "log")]
-                debug!("Calling allocator for size {:#X}", dll.size_of_image);
-                match alloc(dll.size_of_image) {
-                    Some(addr) => (addr, dll.size_of_image),
-                    None => return Err(MappingError::AllocatorFailure),
-                }
-            }
-        };
+        let (base_address, allocation_size) = self
+            .allocator
+            .allocate(dll.image_base)
+            .ok_or(MappingError::AllocatorFailure)?;
 
         #[cfg(feature = "log")]
         info!(
@@ -125,58 +97,16 @@ impl Library {
         Self::internal_map(base_address, allocation_size, dll, data)?;
         Ok(self)
     }
-
-    pub fn from_file(path: &str) -> Result<Self, std::io::Error> {
-        let data = std::fs::read(path)?;
-        #[cfg(feature = "log")]
-        info!("Read library file {}", path);
-
-        Ok(Self {
-            base_address: None,
-            allocator: Allocator::default(),
-            resolver: Resolver::default(),
-            data: Some(data),
-        })
-    }
-
-    pub fn from_raw<T: Into<Vec<u8>>>(bytes: T) -> Self {
-        let data: Vec<u8> = bytes.into();
-        Self {
-            base_address: None,
-            allocator: Allocator::default(),
-            resolver: Resolver::default(),
-            data: Some(data),
-        }
-    }
-
-    pub fn allocator(mut self, alloc: Allocator) -> Self {
-        self.allocator = alloc;
-        self
-    }
-
-    pub fn function_resolver(mut self, resolver: Resolver) -> Self {
-        self.resolver = resolver;
-        self
-    }
 }
 
 // Usage
-impl Library {
+impl<A: Allocator, R: Resolver> Library<A, R> {
     pub fn function<T>(&self, name: &str) -> Option<T> {
         if let Some(addr) = self.base_address {
-            let fn_ptr = match self.resolver {
-                Resolver::Native => loader::functions::find_function(addr, name),
-                Resolver::Custom(resolv) => resolv(addr, name),
-            };
+            let fn_ptr = self.resolver.resolve(addr, name);
             unsafe {
                 return fn_ptr.map(|address| std::mem::transmute_copy(&address));
             }
-        }
-        None
-    }
-    pub fn find(&self, name: &str) -> Option<*const u8> {
-        if let Some(addr) = self.base_address {
-            return loader::functions::find_function(addr, name);
         }
         None
     }

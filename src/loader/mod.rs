@@ -1,5 +1,4 @@
 pub(crate) mod execute;
-pub(crate) mod functions;
 pub(crate) mod iat;
 pub(crate) mod mmap;
 pub(crate) mod reloc;

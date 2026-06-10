@@ -1,6 +1,7 @@
 pub use library::Library;
+pub mod allocators;
 mod error;
 mod library;
 mod loader;
-pub mod options;
 mod parser;
+pub mod resolvers;
