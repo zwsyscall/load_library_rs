@@ -14,6 +14,24 @@ unsafe extern "system" {
     ) -> *const c_void;
 }
 
+pub struct PreAllocated {
+    target: usize,
+}
+
+impl PreAllocated {
+    pub fn new(target: *const c_void) -> Self {
+        Self {
+            target: target as usize,
+        }
+    }
+}
+
+impl Allocator for PreAllocated {
+    fn allocate(&mut self, size: usize) -> Option<(usize, usize)> {
+        return Some((self.target, size));
+    }
+}
+
 pub struct DefaultAllocator {}
 impl Allocator for DefaultAllocator {
     fn allocate(&mut self, size: usize) -> Option<(usize, usize)> {

@@ -13,10 +13,32 @@ pub struct Library<
     A: Allocator = allocators::DefaultAllocator,
     R: Resolver = resolvers::DefaultResolver,
 > {
-    pub(crate) base_address: Option<usize>,
+    pub base_address: Option<usize>,
     allocator: A,
     resolver: R,
     data: Option<Vec<u8>>,
+}
+
+impl Library {
+    pub fn from(data: &[u8]) -> Self {
+        Self {
+            base_address: None,
+            allocator: allocators::DefaultAllocator {},
+            resolver: resolvers::DefaultResolver {},
+            data: Some(data.to_owned()),
+        }
+    }
+}
+
+impl<A: Allocator> Library<A> {
+    pub fn from_with_allocator(data: &[u8], allocator: A) -> Self {
+        Self {
+            base_address: None,
+            allocator: allocator,
+            resolver: resolvers::DefaultResolver {},
+            data: Some(data.to_owned()),
+        }
+    }
 }
 
 // Construction

@@ -5,3 +5,5 @@ mod library;
 mod loader;
 mod parser;
 pub mod resolvers;
+
+pub use error::MappingError as Error;
